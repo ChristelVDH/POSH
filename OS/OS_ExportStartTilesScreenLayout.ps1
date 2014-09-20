@@ -1,0 +1,1 @@
+Export-StartLayout -path D:\Bak\SystemSettings\$($env:computername)_StartScreenTiles.bin -As BIN
