@@ -15,7 +15,7 @@ $script:Events = @()
 
 end{
 if ($SendMail){
-	Send-MailMessage -To "az-ict-systemen-centraal@aquafin.be" -Subject $script:Events[0].ProviderName -Body $($script:Events | Format-Table ID, Message -AutoSize) -SmtpServer smtpgate.aquafin.be -From $($env:computername + "@aquafinad.be")
+	Send-MailMessage -To "ICT@company.be" -Subject $script:Events[0].ProviderName -Body $($script:Events | Format-Table ID, Message -AutoSize) -SmtpServer smtpgate.company.be -From $($env:computername + "@company.be")
 	}
 else{
 	$script:Events | Format-Table ID, Message -AutoSize
