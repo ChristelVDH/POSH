@@ -33,7 +33,7 @@ if ( Test-Path $ImportHostFilePath -PathType Leaf ){
 	#if current hosts file contains no hosts yet then add all new imported host entries
 	else { $AddHostEntries = $HostEntries }
 	if( Get-Confirmation -prompt "Do you want to update your hosts file with $($AddHostEntries.count) new entries?" ){
-		$Hosts += ( $AddHostEntries | Sort-Object -Unique )
+		$Hosts += ( $AddHostEntries | Sort Hostname -Unique )
 		$Hosts += New-Object PSObject -Property @{PSTypeName = 'My.HostEntry';IP = "";HostName = "";Comment = "#Update-Host Script (https://github.com/chriskenis)"}
 		$Hosts += New-Object PSObject -Property @{PSTypeName = 'My.HostEntry';IP = "";HostName = "";Comment = "#$($AddHostEntries.Count) entries added on dd $(Get-Date) $($nl)"}
 		write-Verbose "$($AddHostEntries.Count) entries will be added to $($HostFile.FullName)"
