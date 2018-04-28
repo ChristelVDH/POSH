@@ -1,0 +1,74 @@
+#requires -Version 2.0
+[cmdletbinding()]
+param(
+[ValidateSet("Disabled","Enabled")][string]$AllowSleep,
+[ValidateSet("No_Preference","2.4GHz_preferred","5.0GHz_preferred")][string]$RoamingPreferredBandType
+)
+
+$nl = [Environment]::NewLine
+#include only devices compatible with the option values to be set
+$DevIDs = @{
+"Intel(R) Dual Band Wireless-AC 8265" = "PCI\VEN_8086&DEV_24FD&SUBSYS_11308086&REV_88\4&1F7C780F&0&00E2"
+"Intel(R) Dual Band Wireless-AC 8260" = "PCI\VEN_8086&DEV_24F3&SUBSYS_11308086&REV_3A\4&1d1fdae9&0&00E0"
+}
+
+switch ($AllowSleep) {
+	"Disabled"{ $SleepStateValue = 24 }
+	"Enabled" { $SleepStateValue = 0 }
+	}
+	
+switch ($RoamingPreferredBandType) {
+	"No_Preference" { $NewRoamingPreferredBandType = 0 }
+	"2.4GHz_preferred" { $NewRoamingPreferredBandType = 1 }
+	"5.0GHz_preferred" { $NewRoamingPreferredBandType = 2 }
+	}
+
+#find correctly installed and enabled physical network adapters
+$wmiqry = "Win32_NetworkAdapter WHERE Manufacturer != 'Microsoft' AND (NOT PNPDeviceID LIKE 'ROOT\\%') AND (ConfigManagerErrorCode = 0 OR (ConfigManagerErrorCode = 22 AND NetConnectionStatus = 0))"
+$PhysicalNetAdapters = Get-WmiObject $wmiqry
+#Get-CimInstance -ClassName CIM_NetworkAdapter
+$DeviceClassGuid = "{4D36E972-E325-11CE-BFC1-08002bE10318}"
+
+Foreach($PhysicalNetAdapter in $PhysicalNetAdapters){
+	$PhysicalAdapterName = $PhysicalNetAdapter.Name
+	Write-Verbose "processing $($PhysicalAdapterName) with PNPDevID $($PhysicalNetAdapter.DeviceID)"
+	#if Devicename is not in array of DevIDs skip to the next network adapter
+	if (-not ($DevIDs.Contains($PhysicalAdapterName))){ 
+		Write-Verbose "skipping $($PhysicalAdapterName)$($nl)"		
+		continue 
+		}
+	Write-Verbose "setting driver options for $($PhysicalAdapterName)"
+	#get currently assigned unique device id number
+	$AdapterDeviceNumber = $PhysicalNetAdapter.DeviceID.PadLeft(4,"0")
+	$KeyPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{0}\{1}" -f $DeviceClassGuid, $AdapterDeviceNumber
+	$KeyName = "PnpCapabilities"
+	If (Test-Path -Path $KeyPath) {
+		$PnPCapabilitiesValue = (Get-ItemProperty -Path $KeyPath).$KeyName
+		if ($PnPCapabilitiesValue -eq $SleepStateValue) { Write-Verbose "sleep state for $($PhysicalAdapterName) is already $($AllowSleep)" }
+		else {
+			Try {
+				if ( [string]::IsNullOrEmpty( $PnpCapabilitiesValue )){ New-ItemProperty -Path $KeyPath -Name $KeyName -Value $SleepStateValue -PropertyType DWord -Force }
+				else { Set-ItemProperty -Path $KeyPath -Name $KeyName -Value $SleepStateValue -Force }
+				Write-Verbose "sleep state for $($PhysicalAdapterName) has been $($AllowSleep)"
+				}
+			Catch { Write-Error "Setting sleep state to $($AllowSleep) for $($PhysicalAdapterName) failed" }
+			}
+		}
+	Else { Write-Warning "The path ($KeyPath) not found" }
+	#change preference to NewRoamingPreferredBandType
+	$KeyName = "RoamingPreferredBandType"
+	$CurrentRoamingPreferredBandType = (Get-ItemProperty -Path $KeyPath).$KeyName
+	Try {
+		if ( [string]::IsNullOrEmpty( $CurrentRoamingPreferredBandType )){ 
+			New-ItemProperty -Path $KeyPath -Name $KeyName -Value $NewRoamingPreferredBandType -PropertyType REG_SZ -Force 
+			}
+		else { Set-ItemProperty -Path $KeyPath -Name $KeyName -Value $NewRoamingPreferredBandType -Force }
+		Write-Verbose "Changed RoamingPreferredBandType for $($PhysicalAdapterName) from $($CurrentRoamingPreferredBandType) to $($NewRoamingPreferredBandType)"
+		}
+	Catch { Write-Error "Setting RoamingPreferredBandType to $($NewRoamingPreferredBandType) for $($PhysicalAdapterName) failed" }
+	Write-Verbose "disabling $($PhysicalAdapterName) to apply changed settings"
+	$PhysicalNetAdapter.Disable()
+	Start-Sleep -Milliseconds 500
+	Write-Verbose "re-enabling $($PhysicalAdapterName)"
+	$PhysicalNetAdapter.Enable()
+	}
